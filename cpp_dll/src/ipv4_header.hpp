@@ -55,27 +55,27 @@ public:
   ipv4_header() noexcept { std::fill(rep_, rep_ + sizeof(rep_), 0); }
   ~ipv4_header() noexcept = default;
 
-  ipv4_header(const ipv4_header& ih)
+  ipv4_header(const ipv4_header& ih) noexcept
   {
-    std::memcpy(rep_, ih.rep_, sizeof(rep_));
+    std::copy(ih.rep_, ih.rep_ + sizeof(rep_), rep_);
   }
 
   ipv4_header(ipv4_header&& ih) noexcept
   {
-    std::memcpy(rep_, ih.rep_, sizeof(rep_));
+    std::copy(ih.rep_, ih.rep_ + sizeof(rep_), rep_);
   }
 
-  unsigned char version() const { return (rep_[0] >> 4) & 0xF; }
-  unsigned short header_length() const { return (rep_[0] & 0xF) * 4; }
-  unsigned char type_of_service() const { return rep_[1]; }
-  unsigned short total_length() const { return decode(2, 3); }
-  unsigned short identification() const { return decode(4, 5); }
-  bool dont_fragment() const { return (rep_[6] & 0x40) != 0; }
-  bool more_fragments() const { return (rep_[6] & 0x20) != 0; }
-  unsigned short fragment_offset() const { return decode(6, 7) & 0x1FFF; }
-  unsigned int time_to_live() const { return rep_[8]; }
-  unsigned char protocol() const { return rep_[9]; }
-  unsigned short header_checksum() const { return decode(10, 11); }
+  unsigned char version() const noexcept { return (rep_[0] >> 4) & 0xF; }
+  unsigned short header_length() const noexcept { return (rep_[0] & 0xF) * 4; }
+  unsigned char type_of_service() const noexcept { return rep_[1]; }
+  unsigned short total_length() const noexcept { return decode(2, 3); }
+  unsigned short identification() const noexcept { return decode(4, 5); }
+  bool dont_fragment() const noexcept { return (rep_[6] & 0x40) != 0; }
+  bool more_fragments() const noexcept { return (rep_[6] & 0x20) != 0; }
+  unsigned short fragment_offset() const noexcept { return decode(6, 7) & 0x1FFF; }
+  unsigned int time_to_live() const noexcept { return rep_[8]; }
+  unsigned char protocol() const noexcept { return rep_[9]; }
+  unsigned short header_checksum() const noexcept { return decode(10, 11); }
 
   asio::ip::address_v4 source_address() const
   {
@@ -105,7 +105,7 @@ public:
   }
 
 private:
-  unsigned short decode(int a, int b) const
+  unsigned short decode(int a, int b) const noexcept
     { return (rep_[a] << 8) + rep_[b]; }
 
   unsigned char rep_[60];

@@ -37,7 +37,8 @@ public:
   enum { echo_reply = 0, destination_unreachable = 3, source_quench = 4,
     redirect = 5, echo_request = 8, time_exceeded = 11, parameter_problem = 12,
     timestamp_request = 13, timestamp_reply = 14, info_request = 15,
-    info_reply = 16, address_request = 17, address_reply = 18 };
+    info_reply = 16, address_request = 17, address_reply = 18,
+    v6_echo_request = 128, v6_echo_reply = 129 };
 
   icmp_header() noexcept { std::fill(rep_, rep_ + sizeof(rep_), 0); }
 
@@ -45,11 +46,12 @@ public:
 
   icmp_header(const icmp_header& ih) noexcept
   {
-    std::memcpy(rep_, ih.rep_, sizeof(rep_));
+    std::copy(ih.rep_, ih.rep_ + sizeof(rep_), rep_);
   }
+  
   icmp_header(icmp_header&& ih) noexcept
   {
-    std::memcpy(rep_, ih.rep_, sizeof(rep_));
+    std::copy(ih.rep_, ih.rep_ + sizeof(rep_), rep_);
   }
 
   unsigned char type() const noexcept { return rep_[0]; }
