@@ -1,13 +1,3 @@
-//
-// ping.hpp
-// ~~~~~~~~
-//
-// Copyright (c) 2003-2025 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-//
-// Distributed under the Boost Software License, Version 1.0. (See accompanying
-// file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
-//
-
 #ifndef PING_HPP
 #define PING_HPP
 
@@ -36,7 +26,10 @@ struct icmp_compose
 
 template<class HeaderType>
   requires std::is_same_v<HeaderType, ipv4_header> || std::is_same_v<HeaderType, ipv6_header>
-inline asio::awaitable<std::vector<icmp_compose<HeaderType>>> async_ping(std::string_view dest, std::size_t count = 3)
+inline asio::awaitable<std::vector<icmp_compose<HeaderType>>>
+  async_ping(std::string_view dest,
+              int count = 3,
+              int ttl = 64)
 {
   using namespace asio::experimental::awaitable_operators;
 
@@ -58,6 +51,13 @@ inline asio::awaitable<std::vector<icmp_compose<HeaderType>>> async_ping(std::st
   std::string body("\"Hello!\" from Asio ping.");
   asio::streambuf reply_buffer;
 
+  if constexpr (is_v4) {
+    if (ttl != 64) {
+      asio::ip::unicast::hops hops(ttl);
+      socket.set_option(hops);
+    }
+  }
+
   auto get_identifier = [] -> unsigned short {
 #if defined(ASIO_WINDOWS)
     return static_cast<unsigned short>(::GetCurrentProcessId());
@@ -67,7 +67,7 @@ inline asio::awaitable<std::vector<icmp_compose<HeaderType>>> async_ping(std::st
   };
 
   std::vector<icmp_compose<HeaderType>> composes;
-  for (std::size_t sequence_number = 0; sequence_number < count; ++sequence_number) {
+  for (int sequence_number = 0; sequence_number < count; ++sequence_number) {
     // Create an ICMP header for an echo request.
     icmp_header echo_request;
     if constexpr (is_v4) {
@@ -99,6 +99,7 @@ inline asio::awaitable<std::vector<icmp_compose<HeaderType>>> async_ping(std::st
     auto now = std::chrono::steady_clock::now();
     auto value_ptr = std::get_if<std::size_t>(&value);
     if (!value_ptr){
+      composes.emplace_back(HeaderType{}, icmp_header{}, 0, std::chrono::nanoseconds(0));
       continue;
     }
 
@@ -114,9 +115,9 @@ inline asio::awaitable<std::vector<icmp_compose<HeaderType>>> async_ping(std::st
       is >> icmp_hdr;
     }
 
-    if (is && icmp_hdr.type() == (is_v4 ? icmp_header::echo_reply : icmp_header::v6_echo_reply)
+    if (is/* && icmp_hdr.type() == (is_v4 ? icmp_header::echo_reply : icmp_header::v6_echo_reply)
           && icmp_hdr.identifier() == get_identifier()
-          && icmp_hdr.sequence_number() == sequence_number)
+          && icmp_hdr.sequence_number() == sequence_number*/)
     {
       auto elapsed = now - time_sent;
       composes.emplace_back(std::move(ip_hdr), std::move(icmp_hdr), length, std::move(elapsed));
