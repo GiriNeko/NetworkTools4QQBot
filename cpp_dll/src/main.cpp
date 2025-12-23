@@ -21,12 +21,13 @@ static inline py::dict make_status_dict(std::string_view status,
   return dict;
 }
 
+template <class IPType, class OriginalIPType = std::remove_cvref_t<IPType>>
 py::list ping(const std::string &dest, int count, int ttl, int timeout) {
   asio::io_context io_context;
   auto future = asio::co_spawn(
       io_context,
       net::async_ping(dest, count, ttl, std::chrono::milliseconds(timeout),
-                      net::use_ipv4),
+                      OriginalIPType{}),
       asio::use_future);
   io_context.run();
   py::list list;
@@ -36,7 +37,8 @@ py::list ping(const std::string &dest, int count, int ttl, int timeout) {
                                  "error occurred, the task was not processed"));
     return list;
   }
-  std::vector<net::icmp_compose<net::ipv4_header>> composes;
+  std::vector<net::icmp_compose<net::ip_token_to_header_t<OriginalIPType>>>
+      composes;
   try {
     composes = future.get();
   } catch (const std::exception &e) {
@@ -61,54 +63,15 @@ py::list ping(const std::string &dest, int count, int ttl, int timeout) {
   return list;
 }
 
-py::list pingv6(const std::string &dest, int count, int ttl, int timeout) {
-  asio::io_context io_context;
-  auto future = asio::co_spawn(
-      io_context,
-      net::async_ping(dest, count, ttl, std::chrono::milliseconds(timeout),
-                      net::use_ipv6),
-      asio::use_future);
-  io_context.run();
-  py::list list;
-  if (future.wait_for(std::chrono::nanoseconds(0)) ==
-      std::future_status::deferred) {
-    list.append(make_status_dict("error",
-                                 "error occurred, the task was not processed"));
-    return list;
-  }
-  std::vector<net::icmp_compose<net::ipv6_header>> composes;
-  try {
-    composes = future.get();
-  } catch (const std::exception &e) {
-    list.append(make_status_dict("error", e.what()));
-    return list;
-  }
-  for (const auto &[ipv6_hdr, icmp_hdr, length, elapsed] : composes) {
-    if (!length) {
-      list.append(make_status_dict("error", "timeout"));
-      continue;
-    }
-    py::dict dict =
-        make_status_dict("success", "successfully receive the icmp package");
-    dict["bytes"] = length;
-    dict["address"] = ipv6_hdr.source_address().to_string();
-    dict["icmp_seq"] = icmp_hdr.sequence_number();
-    dict["time"] =
-        std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-    list.append(std::move(dict));
-  }
-  return list;
-}
-
-py::list tracert(const std::string &dest, int timeout) {
+template <class IPType, class OriginalIPType = std::remove_cvref_t<IPType>>
+py::list tracert(const std::string &dest, int hops_count, int timeout) {
   bool can_ping = false;
-  int hops_count = 30;
   {
     asio::io_context io_context;
     auto future = asio::co_spawn(
         io_context,
         net::async_ping(dest, 3, 64, std::chrono::milliseconds(1000),
-                        net::use_ipv4),
+                        OriginalIPType{}),
         asio::use_future);
     io_context.run();
     py::list list;
@@ -118,7 +81,8 @@ py::list tracert(const std::string &dest, int timeout) {
           "error", "error occurred, the task was not processed"));
       return list;
     }
-    std::vector<net::icmp_compose<net::ipv4_header>> composes;
+    std::vector<net::icmp_compose<net::ip_token_to_header_t<OriginalIPType>>>
+        composes;
     try {
       composes = future.get();
     } catch (const std::exception &e) {
@@ -128,7 +92,6 @@ py::list tracert(const std::string &dest, int timeout) {
     for (const auto &[ipv4_hdr, icmp_hdr, length, elapsed] : composes) {
       if (length) {
         can_ping = true;
-        hops_count = 64 - ipv4_hdr.time_to_live() - 1;
         break;
       }
     }
@@ -138,7 +101,15 @@ py::list tracert(const std::string &dest, int timeout) {
   try {
     asio::io_context io_context;
     asio::ip::icmp::resolver resolver(io_context);
-    destination = *resolver.resolve(asio::ip::icmp::v4(), dest, "").begin();
+    constexpr bool is_v4 = std::is_same_v<OriginalIPType, net::use_ipv4_t>;
+    constexpr auto get_icmp = [] -> asio::ip::icmp {
+      if constexpr (is_v4) {
+        return asio::ip::icmp::v4();
+      } else {
+        return asio::ip::icmp::v6();
+      }
+    };
+    destination = *resolver.resolve(get_icmp(), dest, "").begin();
   } catch (const std::exception &e) {
     list.append(make_status_dict("error", e.what()));
     return list;
@@ -149,7 +120,7 @@ py::list tracert(const std::string &dest, int timeout) {
     auto future = asio::co_spawn(
         io_context,
         net::async_ping(dest, 3, ttl, std::chrono::milliseconds(timeout),
-                        net::use_ipv4),
+                        OriginalIPType{}),
         asio::use_future);
     io_context.run();
     if (future.wait_for(std::chrono::nanoseconds(0)) ==
@@ -157,7 +128,8 @@ py::list tracert(const std::string &dest, int timeout) {
       list.append(make_status_dict("error", "timeout"));
       continue;
     }
-    std::vector<net::icmp_compose<net::ipv4_header>> composes;
+    std::vector<net::icmp_compose<net::ip_token_to_header_t<OriginalIPType>>>
+        composes;
     try {
       composes = future.get();
     } catch (const std::exception &e) {
@@ -224,8 +196,12 @@ py::dict tcping(const std::string &host, std::uint16_t port, int timeout) {
 
 PYBIND11_MODULE(network_utils_externel_cpp, m) {
   m.doc() = "A Cpp network utils module for python";
-  m.def("ping", &ping, "ping the destination");
-  m.def("pingv6", &pingv6, "ping the destination in ipv6");
-  m.def("tracert", &tracert, "tracert the destination");
+  m.def("ping", &ping<decltype(net::use_ipv4)>, "ping the destination");
+  m.def("pingv6", &ping<decltype(net::use_ipv6)>,
+        "ping the destination in ipv6");
+  m.def("tracert", &tracert<decltype(net::use_ipv4)>,
+        "tracert the destination");
+  m.def("tracertv6", &tracert<decltype(net::use_ipv6)>,
+        "tracert the destination in ipv6");
   m.def("tcping", &tcping, "tcping a host");
 }

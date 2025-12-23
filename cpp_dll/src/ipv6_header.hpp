@@ -57,11 +57,11 @@ public:
   unsigned int flow_label() const noexcept {
     return (rep_[1] & 0xF) << 16 | (rep_[2] << 8) | rep_[3];
   }
-  unsigned short payload_length() const noexcept {
+  unsigned short header_length() const noexcept {
     return (rep_[4] << 8) + rep_[5];
   }
   unsigned char next_header() const noexcept { return rep_[6]; }
-  unsigned int hop_limit() const noexcept { return rep_[7]; }
+  unsigned int time_to_live() const noexcept { return rep_[7]; }
 
   asio::ip::address_v6 source_address() const {
     asio::ip::address_v6::bytes_type bytes = {

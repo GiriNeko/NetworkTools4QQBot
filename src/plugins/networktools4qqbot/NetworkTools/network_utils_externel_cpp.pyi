@@ -3,7 +3,7 @@ A Cpp network utils module for python
 """
 from __future__ import annotations
 import typing
-__all__: list[str] = ['ping', 'pingv6', 'tcping', 'tracert']
+__all__: list[str] = ['ping', 'pingv6', 'tcping', 'tracert', 'tracertv6']
 def ping(arg0: str, arg1: typing.SupportsInt | typing.SupportsIndex, arg2: typing.SupportsInt | typing.SupportsIndex, arg3: typing.SupportsInt | typing.SupportsIndex) -> list:
     """
     ping the destination
@@ -16,7 +16,11 @@ def tcping(arg0: str, arg1: typing.SupportsInt | typing.SupportsIndex, arg2: typ
     """
     tcping a host
     """
-def tracert(arg0: str, arg1: typing.SupportsInt | typing.SupportsIndex) -> list:
+def tracert(arg0: str, arg1: typing.SupportsInt | typing.SupportsIndex, arg2: typing.SupportsInt | typing.SupportsIndex) -> list:
     """
     tracert the destination
+    """
+def tracertv6(arg0: str, arg1: typing.SupportsInt | typing.SupportsIndex, arg2: typing.SupportsInt | typing.SupportsIndex) -> list:
+    """
+    tracert the destination in ipv6
     """

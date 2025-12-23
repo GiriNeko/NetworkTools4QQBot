@@ -34,7 +34,7 @@
 namespace net {
 class icmp_header {
 public:
-  enum {
+  enum class ipv4 {
     echo_reply = 0,
     destination_unreachable = 3,
     source_quench = 4,
@@ -48,8 +48,25 @@ public:
     info_reply = 16,
     address_request = 17,
     address_reply = 18,
-    v6_echo_request = 128,
-    v6_echo_reply = 129
+  };
+
+  enum class ipv6 {
+    destination_unreachable = 1,
+    packet_too_big = 2,
+    time_exceeded = 3,
+    parameter_problem = 4,
+    private_experimentation = 100,
+    echo_request = 128,
+    echo_reply = 129,
+    multicast_listener_query = 130,
+    multicast_listener_report = 131,
+    multicast_listener_done = 132,
+    router_solicitation = 133,
+    router_advertisement = 134,
+    neighbor_solicitation = 135,
+    neighbor_advertisement = 136,
+    redirect_message = 137,
+    router_renumbering = 138
   };
 
   icmp_header() noexcept { std::fill(rep_, rep_ + sizeof(rep_), 0); }

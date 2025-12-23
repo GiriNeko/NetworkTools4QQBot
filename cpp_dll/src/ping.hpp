@@ -8,6 +8,7 @@
 #include <iostream>
 #include <istream>
 #include <ostream>
+#include <print>
 #include <string>
 #include <string_view>
 
@@ -43,10 +44,10 @@ inline constexpr bool is_ip_token_v =
 template <class HeaderType, class OHT = std::remove_cvref_t<HeaderType>>
   requires std::is_same_v<OHT, ipv4_header> || std::is_same_v<OHT, ipv6_header>
 struct icmp_compose {
-  OHT ipv4header;
-  icmp_header icmpheader;
-  std::size_t length;
-  std::chrono::steady_clock::duration elapsed;
+  OHT ipv4header{};
+  icmp_header icmpheader{};
+  std::size_t length = 0;
+  std::chrono::steady_clock::duration elapsed{};
 };
 
 template <class IPType, class DurationRepType, class DurationPeriodType,
@@ -64,7 +65,7 @@ async_ping(
   auto executor = co_await asio::this_coro::executor;
   asio::ip::icmp::resolver resolver(executor);
 
-  auto get_icmp = [] -> asio::ip::icmp {
+  constexpr auto get_icmp = [] -> asio::ip::icmp {
     if constexpr (is_v4) {
       return asio::ip::icmp::v4();
     } else {
@@ -98,9 +99,9 @@ async_ping(
     // Create an ICMP header for an echo request.
     icmp_header echo_request;
     if constexpr (is_v4) {
-      echo_request.type(icmp_header::echo_request);
+      echo_request.type(std::to_underlying(icmp_header::ipv4::echo_request));
     } else {
-      echo_request.type(icmp_header::v6_echo_request);
+      echo_request.type(std::to_underlying(icmp_header::ipv6::echo_request));
     }
     echo_request.code(0);
     echo_request.identifier(get_identifier());
@@ -121,10 +122,10 @@ async_ping(
     reply_buffer.consume(reply_buffer.size());
     auto time_sent = std::chrono::steady_clock::now();
     asio::ip::icmp::endpoint sender;
-    auto value = co_await (
-      socket.async_receive_from(reply_buffer.prepare(65536), sender,
-                    asio::use_awaitable) ||
-      timer.async_wait(asio::use_awaitable));
+    auto value =
+        co_await (socket.async_receive_from(reply_buffer.prepare(65536), sender,
+                                            asio::use_awaitable) ||
+                  timer.async_wait(asio::use_awaitable));
 
     auto now = std::chrono::steady_clock::now();
     auto value_ptr = std::get_if<std::size_t>(&value);
@@ -148,13 +149,20 @@ async_ping(
       ip_hdr.set_source_address(sender.address().to_v6());
     }
 
-    if (is/* && icmp_hdr.type() == (is_v4 ? icmp_header::echo_reply : icmp_header::v6_echo_reply)
-          && icmp_hdr.identifier() == get_identifier()
-          && icmp_hdr.sequence_number() == sequence_number*/)
-    {
+    if (is &&
+        (icmp_hdr.type() ==
+             (is_v4 ? std::to_underlying(icmp_header::ipv4::time_exceeded)
+                    : std::to_underlying(icmp_header::ipv6::time_exceeded)) ||
+         icmp_hdr.type() ==
+                 (is_v4 ? std::to_underlying(icmp_header::ipv4::echo_reply)
+                        : std::to_underlying(icmp_header::ipv6::echo_reply)) &&
+             icmp_hdr.identifier() == get_identifier() &&
+             icmp_hdr.sequence_number() == sequence_number)) {
       auto elapsed = now - time_sent;
       composes.emplace_back(std::move(ip_hdr), std::move(icmp_hdr), length,
                             std::move(elapsed));
+    } else {
+      composes.push_back({});
     }
   }
 
